@@ -19,6 +19,7 @@ import { computeTopicDistribution } from "../analytics.js";
  * }} props
  */
 export default function PeerCompareTab({
+  journal,
   peers, setPeers,
   peerDivergence,
   driftResult,
@@ -136,7 +137,12 @@ export default function PeerCompareTab({
 
       {/* Results */}
       {peerDivergence && (
-        <Section title="Peer comparison result">
+        <Section
+          title="Peer comparison result"
+          action={
+            <ExportBtn onClick={() => exportPeerCSV(peerDivergence, targetDist, journal?.display_name, peers)} />
+          }
+        >
           <div
             style={{
               background: C.surface,
@@ -199,21 +205,97 @@ export default function PeerCompareTab({
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, action, children }) {
   return (
     <div style={{ marginBottom: 24 }}>
-      <div
-        style={{
-          fontSize: 10,
-          color: C.textMuted,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          marginBottom: 10,
-        }}
-      >
-        {title}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div
+          style={{
+            fontSize: 10,
+            color: C.textMuted,
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+          }}
+        >
+          {title}
+        </div>
+        {action && action}
       </div>
       {children}
     </div>
   );
+}
+
+function ExportBtn({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: "none",
+        border: `1px solid ${C.border2}`,
+        borderRadius: 6,
+        color: C.textMuted,
+        fontSize: 11,
+        fontFamily: "'IBM Plex Mono', monospace",
+        padding: "4px 10px",
+        cursor: "pointer",
+        letterSpacing: "0.05em",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = C.textPrimary; e.currentTarget.style.borderColor = C.blue; }}
+      onMouseLeave={e => { e.currentTarget.style.color = C.textMuted;   e.currentTarget.style.borderColor = C.border2; }}
+    >
+      Export CSV
+    </button>
+  );
+}
+
+function journalSlug(name) {
+  return (name ?? "journal").replace(/[^a-zA-Z0-9\s]/g, "").trim().replace(/\s+/g, "_") || "journal";
+}
+
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function exportPeerCSV(peerDivergence, targetDist, journalName, peers) {
+  const q = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+  const peerNames = peers.map(p => p.display_name).join("; ");
+
+  const lines = [
+    q(`Journal: ${journalName ?? ""}`),
+    q(`Peers: ${peerNames}`),
+    q(`JSD: ${(peerDivergence.jsd * 100).toFixed(1)} · ${peerDivergence.label}`),
+    "",
+    ["Topic", "Field", "Domain", `${journalName ?? "This journal"} (%)`, "Peer centroid (%)"].map(q).join(","),
+  ];
+
+  // Build a unified topic set from both distributions
+  const allTopicIds = new Set([
+    ...Object.keys(targetDist),
+    ...Object.keys(peerDivergence.centroid),
+  ]);
+
+  const rows = [];
+  for (const tid of allTopicIds) {
+    const t = targetDist[tid];
+    const c = peerDivergence.centroid[tid];
+    const name   = t?.name   ?? c?.name   ?? tid;
+    const field  = t?.field?.display_name  ?? c?.field?.display_name  ?? "";
+    const domain = t?.domain?.display_name ?? c?.domain?.display_name ?? "";
+    const tPct = t ? (t.pct * 100).toFixed(2) : "0.00";
+    const cPct = c ? (c.pct * 100).toFixed(2) : "0.00";
+    rows.push({ name, field, domain, tPct: parseFloat(tPct), cPct: parseFloat(cPct), tPctStr: tPct, cPctStr: cPct });
+  }
+  rows.sort((a, b) => b.tPct - a.tPct);
+
+  for (const r of rows) {
+    lines.push([r.name, r.field, r.domain, r.tPctStr, r.cPctStr].map(q).join(","));
+  }
+
+  downloadCSV(lines.join("\n"), `${journalSlug(journalName)}_peer_comparison.csv`);
 }

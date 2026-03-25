@@ -45,8 +45,9 @@ export const INTRA_CITE_THRESHOLDS = {
   NOTABLY_ELEVATED: 0.20,
 };
 
-// Article count YoY variation: deviation from baseline mean growth rate that flags "outside typical range"
-export const ARTICLE_COUNT_VAR_THRESHOLD = 0.10; // ±10 percentage points
+// Article count YoY variation: raw YoY change > ±20% flags "outside typical range"
+// Reflects typical publishing growth variation — Nature Index reported +16% across all disciplines in 2024.
+export const ARTICLE_COUNT_VAR_THRESHOLD = 0.20; // ±20%
 
 // Per-article topic alignment: baseline share of the article's primary topic
 // High share → topic is well-represented in the baseline → aligned

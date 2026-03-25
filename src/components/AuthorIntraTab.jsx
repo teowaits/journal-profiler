@@ -38,7 +38,8 @@ export default function AuthorIntraTab({
   const allYears     = [...baselineYears, ...measurements.map(m => m.year)].sort();
   const measureYears = measurements.map(m => m.year).sort();
 
-  const [selectedYear, setSelectedYear] = useState(measureYears[measureYears.length - 1]);
+  const [selectedYear, setSelectedYear]           = useState(measureYears[measureYears.length - 1]);
+  const [selectedProlificYear, setSelectedProlificYear] = useState(measureYears[measureYears.length - 1]);
 
   return (
     <div>
@@ -105,8 +106,50 @@ export default function AuthorIntraTab({
         );
       })()}
 
-      {/* ── Section 3: Intra-citation density ─────────────────────────────── */}
-      <Section title="Intra-citation density">
+      {/* ── Section 3: Prolific authors ────────────────────────────────────── */}
+      {(() => {
+        const prolificByYear = {};
+        for (const y of measureYears) {
+          const counts = {};
+          for (const w of worksPerYear[y] ?? []) {
+            for (const a of w.authorships ?? []) {
+              const aid = a.author?.id;
+              if (!aid) continue;
+              if (!counts[aid]) counts[aid] = { author: a.author, institutions: new Set(), articles: [] };
+              counts[aid].articles.push(w);
+              for (const inst of a.institutions ?? []) {
+                if (inst.display_name) counts[aid].institutions.add(inst.display_name);
+              }
+            }
+          }
+          prolificByYear[y] = Object.values(counts)
+            .filter(e => e.articles.length >= 10)
+            .sort((a, b) => b.articles.length - a.articles.length);
+        }
+        const hasProlific = measureYears.some(y => prolificByYear[y].length > 0);
+        return (
+          <Section
+            title="Prolific authors (≥ 10 articles in a single year)"
+            action={hasProlific ? (
+              <ExportBtn onClick={() => exportProlificCSV(prolificByYear, measureYears, journal?.display_name)} />
+            ) : null}
+          >
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>
+              Authors credited on 10 or more articles published in this journal within the same calendar year.
+              Expand a row to view the associated articles.
+            </div>
+            <YearPicker years={measureYears} selected={selectedProlificYear} onSelect={setSelectedProlificYear} />
+            {selectedProlificYear && (
+              <div style={{ marginTop: 16 }}>
+                <ProlificTable entries={prolificByYear[selectedProlificYear] ?? []} year={selectedProlificYear} />
+              </div>
+            )}
+          </Section>
+        );
+      })()}
+
+      {/* ── Section 4: Self-citation density ──────────────────────────────── */}
+      <Section title="Self-citation density">
 
         <SubSection title="Within analysis window">
           <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
@@ -301,6 +344,83 @@ function SurgeTable({ year, surges, works }) {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Prolific authors table ───────────────────────────────────────────────────
+
+function ProlificTable({ entries, year }) {
+  const [expanded, setExpanded] = useState(null);
+
+  if (entries.length === 0) {
+    return (
+      <div style={{
+        background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+        padding: "20px 24px", fontSize: 13, color: C.textMuted, fontStyle: "italic",
+      }}>
+        No authors published 10 or more articles in {year}.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 90px", gap: 1, background: C.border }}>
+        {["Author", "Institution(s)", "Articles"].map(h => (
+          <div key={h} style={{ padding: "7px 12px", fontSize: 10, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", background: C.surface2 }}>
+            {h}
+          </div>
+        ))}
+      </div>
+
+      {entries.map(e => {
+        const aid = e.author?.id;
+        const isExpanded = expanded === aid;
+        const insts = [...e.institutions].join(", ") || "—";
+
+        return (
+          <div key={aid} style={{ borderTop: `1px solid ${C.border}` }}>
+            <div
+              onClick={() => setExpanded(isExpanded ? null : aid)}
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr 90px", gap: 1, background: C.border, cursor: "pointer" }}
+              onMouseEnter={ev => ev.currentTarget.style.background = C.border2}
+              onMouseLeave={ev => ev.currentTarget.style.background = C.border}
+            >
+              <div style={{ ...cell, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 10, color: C.textMuted }}>{isExpanded ? "▲" : "▼"}</span>
+                {e.author?.display_name ?? "Unknown"}
+              </div>
+              <div style={{ ...cell, fontSize: 11, color: C.textMuted }}>{insts}</div>
+              <div style={{ ...cell, fontFamily: "'IBM Plex Mono', monospace", color: C.amber }}>{e.articles.length}</div>
+            </div>
+
+            {isExpanded && (
+              <div style={{ background: C.bgDark, borderTop: `1px solid ${C.border}`, padding: "12px 16px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {e.articles.map(w => (
+                    <div
+                      key={w.id}
+                      style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 14px" }}
+                    >
+                      <div style={{ fontSize: 13, color: C.textPrimary, fontWeight: 500, marginBottom: 4, lineHeight: 1.4 }}>
+                        {w.doi
+                          ? <a href={`https://doi.org/${w.doi}`} target="_blank" rel="noreferrer" style={{ color: C.blue }}>{w.title ?? "(no title)"}</a>
+                          : (w.title ?? "(no title)")}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted, display: "flex", gap: 14, flexWrap: "wrap" }}>
+                        {w.primary_topic?.display_name && <span>· {w.primary_topic.display_name}</span>}
+                        {w.id && <a href={w.id} target="_blank" rel="noreferrer" style={{ color: C.textMuted, marginLeft: "auto" }}>OpenAlex →</a>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -528,6 +648,35 @@ function exportSurgeArticlesCSV(institutionSurgesPerYear, worksPerYear, measureY
     }
   }
   downloadCSV(lines.join("\n"), `${journalSlug(journalName)}_institution_surge_articles.csv`);
+}
+
+function exportProlificCSV(prolificByYear, measureYears, journalName) {
+  const q = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+  const headers = ["Year", "Author", "Institution(s)", "Article count", "Title", "DOI", "Topic", "Subfield", "Field", "Domain"];
+  const lines = [
+    q(`Journal: ${journalName ?? ""}`),
+    headers.map(q).join(","),
+  ];
+
+  for (const year of measureYears) {
+    for (const e of prolificByYear[year] ?? []) {
+      const insts = [...e.institutions].join("; ");
+      for (const w of e.articles) {
+        lines.push([
+          year,
+          e.author?.display_name ?? "",
+          insts,
+          e.articles.length,
+          w.title ?? "", w.doi ?? "",
+          w.primary_topic?.display_name ?? "",
+          w.primary_topic?.subfield?.display_name ?? "",
+          w.primary_topic?.field?.display_name ?? "",
+          w.primary_topic?.domain?.display_name ?? "",
+        ].map(q).join(","));
+      }
+    }
+  }
+  downloadCSV(lines.join("\n"), `${journalSlug(journalName)}_prolific_authors.csv`);
 }
 
 function ExportBtn({ onClick }) {

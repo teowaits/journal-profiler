@@ -36,7 +36,7 @@ const initialState = {
   authorProfilePerYear: {},     // country HHI per year
   institutionSurgesPerYear: {}, // flagged institution surges per measurement year
   intraCitationPerYear: {},
-  articleCountVariation: null,  // { baselineAvgGrowth, perYear }
+  articleCountVariation: null,  // { perYear, allCounts }
   divergentArticles: [],
 
   // Optional: reference alignment

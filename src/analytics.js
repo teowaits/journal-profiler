@@ -303,32 +303,21 @@ export function computeIntraCitationDensity(works, allFetchedIds) {
 // ─── Article count YoY variation ──────────────────────────────────────────────
 
 /**
- * Compute year-over-year article count variation relative to the baseline mean growth rate.
- * Measurement years deviating > ARTICLE_COUNT_VAR_THRESHOLD pp from baseline mean are flagged.
+ * Compute year-over-year article count variation.
+ * Measurement years where |yoyRate| > ARTICLE_COUNT_VAR_THRESHOLD are flagged.
  *
  * @param {{ [year: string]: object[] }} worksPerYear
  * @param {string[]} baselineYears — sorted
  * @param {string[]} measureYears — sorted
  * @returns {{
- *   baselineAvgGrowth: number,
- *   perYear: { [year: string]: { count: number, yoyRate: number | null, label: string } }
+ *   perYear: { [year: string]: { count: number, yoyRate: number | null, label: string } },
+ *   allCounts: { [year: string]: number }
  * }}
  */
 export function computeArticleCountVariation(worksPerYear, baselineYears, measureYears) {
   const allYears = [...baselineYears, ...measureYears].sort();
   const counts = {};
   for (const y of allYears) counts[y] = (worksPerYear[y] ?? []).length;
-
-  // YoY rates within baseline window (year[i-1] → year[i])
-  const baselineRates = [];
-  for (let i = 1; i < baselineYears.length; i++) {
-    const prev = counts[baselineYears[i - 1]];
-    const curr = counts[baselineYears[i]];
-    if (prev > 0) baselineRates.push((curr - prev) / prev);
-  }
-  const baselineAvgGrowth = baselineRates.length > 0
-    ? baselineRates.reduce((a, b) => a + b, 0) / baselineRates.length
-    : 0;
 
   const perYear = {};
   for (const y of measureYears) {
@@ -340,14 +329,13 @@ export function computeArticleCountVariation(worksPerYear, baselineYears, measur
       continue;
     }
     const yoyRate = (count - counts[prevYear]) / counts[prevYear];
-    const deviation = Math.abs(yoyRate - baselineAvgGrowth);
-    const label = deviation > ARTICLE_COUNT_VAR_THRESHOLD
+    const label = Math.abs(yoyRate) > ARTICLE_COUNT_VAR_THRESHOLD
       ? CONCENTRATION_LABELS.outside
       : CONCENTRATION_LABELS.typical;
     perYear[y] = { count, yoyRate, label };
   }
 
-  return { baselineAvgGrowth, perYear, allCounts: counts };
+  return { perYear, allCounts: counts };
 }
 
 // ─── Reference field alignment (optional Signal 2) ────────────────────────────

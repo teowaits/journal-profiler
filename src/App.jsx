@@ -308,6 +308,7 @@ export default function App() {
 
         {activeTab === "peers" && (
           <PeerCompareTab
+            journal={journal}
             peers={peers}
             setPeers={setPeers}
             peerDivergence={peerDivergence}
@@ -333,7 +334,7 @@ export default function App() {
           flexShrink: 0,
         }}
       >
-        <span>Created by teowaits</span>
+        <a href="https://github.com/teowaits/journal-profiler" target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>Created by teowaits</a>
         <span>·</span>
         <a href="https://openalex.org" target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>
           Data from OpenAlex API (CC0)

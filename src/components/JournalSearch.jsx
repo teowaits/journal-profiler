@@ -160,7 +160,7 @@ export default function JournalSearch({ onSelect, placeholder = "Search for a jo
                 {s.display_name}
               </div>
               <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, display: "flex", gap: 12 }}>
-                {s.host_organization?.display_name && <span>{s.host_organization.display_name}</span>}
+                {s.host_organization_name && <span>{s.host_organization_name}</span>}
                 {s.issn_l && <span>ISSN {s.issn_l}</span>}
                 {s.works_count != null && (
                   <span>{s.works_count.toLocaleString()} works</span>

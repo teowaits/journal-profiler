@@ -72,9 +72,7 @@ export default function OverviewTab({
                 {journal.display_name}
               </div>
               <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3, display: "flex", gap: 14 }}>
-                {(journal.host_organization?.display_name ?? journal.host_organization_name) && (
-                    <span>{journal.host_organization?.display_name ?? journal.host_organization_name}</span>
-                  )}
+                <span>{journal.host_organization_name ?? "Publisher unresolved"}</span>
                 {journal.issn_l && <span>ISSN {journal.issn_l}</span>}
                 {journal.works_count != null && (
                   <span>{journal.works_count.toLocaleString()} total works</span>
@@ -244,7 +242,7 @@ export default function OverviewTab({
 
             {/* Intra-citation row */}
             <CompositeRow
-              label="Intra-citation"
+              label="Self-citation"
               years={measureYears}
               getValue={y => {
                 const d = intraCitationPerYear[y];
@@ -497,6 +495,20 @@ function ExpandableYoYRow({ years, articleCountVariation, driftResult }) {
         >
           <span style={{ fontSize: 9, opacity: 0.7 }}>{expanded ? "▲" : "▼"}</span>
           Article count YoY
+          <InfoTip>
+            Flags years where article count changed by more than ±20% compared to the previous year.
+            This threshold reflects typical year-over-year variation in scientific publishing — the
+            Nature Index reported +16% growth across all disciplines in 2024.{" "}
+            <a
+              href="https://www.nature.com/nature-index/news/why-did-the-nature-index-grow-by-sixteen-percent-in-twenty-twenty-four"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: C.blue }}
+              onClick={e => e.stopPropagation()}
+            >
+              Nature Index (2024)
+            </a>
+          </InfoTip>
         </div>
         {years.map(y => {
           const v = articleCountVariation?.perYear?.[y];
@@ -602,6 +614,58 @@ function YoYChart({ allYears, baselineSet, articleCountVariation }) {
         );
       })}
     </div>
+  );
+}
+
+function InfoTip({ children }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span style={{ position: "relative", display: "inline-block", verticalAlign: "middle" }}>
+      <span
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onClick={e => { e.stopPropagation(); setVisible(v => !v); }}
+        style={{
+          cursor: "help",
+          fontSize: 10,
+          color: C.textMuted,
+          border: `1px solid ${C.border2}`,
+          borderRadius: "50%",
+          width: 14,
+          height: 14,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginLeft: 4,
+          userSelect: "none",
+          fontFamily: "'IBM Plex Mono', monospace",
+          lineHeight: 1,
+        }}
+      >
+        i
+      </span>
+      {visible && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            background: C.surface2,
+            border: `1px solid ${C.border2}`,
+            borderRadius: 8,
+            padding: "10px 13px",
+            fontSize: 11,
+            color: C.textMuted,
+            lineHeight: 1.55,
+            width: 300,
+            zIndex: 200,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </span>
   );
 }
 

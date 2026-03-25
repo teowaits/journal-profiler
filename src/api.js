@@ -43,7 +43,7 @@ async function apiFetch(url, signal) {
 export async function searchSources(query, signal) {
   const url =
     `${OPENALEX_BASE}/sources?search=${encodeURIComponent(query)}&per_page=8` +
-    `&select=id,display_name,issn_l,works_count,host_organization`;
+    `&select=id,display_name,issn_l,works_count,host_organization_name`;
   const data = await apiFetch(url, signal);
   return data.results ?? [];
 }
@@ -58,7 +58,7 @@ export async function fetchSource(sourceId, signal) {
   const sid = stripBase(sourceId);
   const url =
     `${OPENALEX_BASE}/sources/${sid}` +
-    `?select=id,display_name,issn_l,works_count,type,host_organization,apc_usd,country_code`;
+    `?select=id,display_name,issn_l,works_count,type,host_organization_name,apc_usd,country_code`;
   return apiFetch(url, signal);
 }
 

@@ -155,7 +155,7 @@ function WordCloudComparison({ baseline, baselineYears, measurements, topicProfi
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <select
               value={selectedYear}
-              onChange={e => setSelectedYear(Number(e.target.value))}
+              onChange={e => setSelectedYear(e.target.value)}
               style={{
                 background: C.surface,
                 border: `1px solid ${C.border2}`,
