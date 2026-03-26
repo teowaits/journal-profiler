@@ -1,5 +1,7 @@
 # Journal Profile Analyser
 
+**Live app → [teowaits.github.io/journal-profiler](https://teowaits.github.io/journal-profiler/)**
+
 A browser-based bibliometric tool for analysing the **publishing profile of an academic journal over time**, powered by the [OpenAlex](https://openalex.org) open scholarly metadata API.
 
 Given a journal and a date range, the app computes a suite of signals across four analytical views, surfacing patterns that warrant closer review by subject matter experts. The tool is designed to inform — not to render verdicts.
@@ -59,6 +61,24 @@ No API key is required — OpenAlex is free and open. For sustained heavy usage,
 
 ---
 
+## Deploying to GitHub Pages
+
+The production build outputs to the `docs/` folder and sets the base path to `/journal-profiler/` — matching this repository name.
+
+```bash
+# Rebuild after any code change
+npm run build
+
+# Commit the updated docs/ folder and push
+git add docs/
+git commit -m "Rebuild for Pages"
+git push
+```
+
+On GitHub: **Settings → Pages → Source → Deploy from a branch → `main` / `/docs`**.
+
+---
+
 ## How it works
 
 1. **Journal resolution** — the journal name is resolved to an OpenAlex Source ID via the `/sources` search endpoint (two-step lookup; never filtered by name directly).
@@ -94,6 +114,8 @@ Every analytical view offers CSV export:
 | Articles | All measurement-year articles with topic alignment metrics and optional ref-alignment columns |
 | Country distribution | All countries (not just the chart's top 10); author-affiliation counts per year |
 | Institution surge articles | All articles from surging institutions, with Year as a column |
+| Prolific authors | Authors with ≥ 10 articles in a single measurement year; one row per article |
+| Peer comparison | Topic % for this journal and the peer centroid, with JSD scores |
 
 All files are named `{Journal_Name}_{type}.csv` and include the journal name as the first row for easy identification.
 

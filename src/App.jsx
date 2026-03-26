@@ -103,8 +103,6 @@ export default function App() {
       }}
     >
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
@@ -112,9 +110,6 @@ export default function App() {
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button { opacity: 1; }
         select option { background: ${C.surface2}; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: ${C.bg}; }
-        ::-webkit-scrollbar-thumb { background: ${C.border2}; border-radius: 3px; }
         a { color: ${C.blue}; }
       `}</style>
 
@@ -142,49 +137,60 @@ export default function App() {
       {/* Header */}
       <header
         style={{
+          background: C.bgDark,
           borderBottom: `1px solid ${C.border}`,
           padding: "0 32px",
           display: "flex",
           alignItems: "center",
           gap: 20,
-          height: 52,
+          height: 56,
           flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.textPrimary, letterSpacing: "-0.01em" }}>
-            Journal Profile Analyser
-          </span>
-          {journal && (
-            <span style={{ fontSize: 12, color: C.textMuted }}>
-              · {journal.display_name}
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'IBM Plex Sans', sans-serif" }}>
+            OpenAlex · Publishing Analysis
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: C.textPrimary, fontFamily: "'IBM Plex Sans', sans-serif", letterSpacing: "-0.01em" }}>
+              Journal Profile Analyser
             </span>
-          )}
+            {journal && (
+              <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                · {journal.display_name}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          {phase === "running" && (
-            <>
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: C.blue,
-                  animation: "pulse 1.2s ease infinite",
-                }}
-              />
-              <span style={{ fontSize: 11, color: C.textMuted }}>Analysing…</span>
-            </>
-          )}
-          {phase === "done" && (
-            <>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green }} />
-              <span style={{ fontSize: 11, color: C.textMuted }}>
-                {totalArticles.toLocaleString()} articles · {yearRange.from}–{yearRange.to}
-              </span>
-            </>
-          )}
+        <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+          <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'IBM Plex Sans', sans-serif", letterSpacing: "0.05em" }}>
+            Powered by OpenAlex
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {phase === "running" && (
+              <>
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: C.blue,
+                    animation: "pulse 1.2s ease infinite",
+                  }}
+                />
+                <span style={{ fontSize: 11, color: C.textMuted }}>Analysing…</span>
+              </>
+            )}
+            {phase === "done" && (
+              <>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.green }} />
+                <span style={{ fontSize: 11, color: C.textMuted }}>
+                  {totalArticles.toLocaleString()} articles · {yearRange.from}–{yearRange.to}
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </header>
 

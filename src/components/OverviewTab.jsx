@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { C, MIN_YEAR_RANGE, BASELINE_YEARS, DRIFT_LABELS, CONCENTRATION_LABELS, INTRA_CITE_LABELS } from "../constants.js";
+import { searchSources } from "../api.js";
 import JournalSearch from "./JournalSearch.jsx";
 import ProgressPanel from "./ProgressPanel.jsx";
+
+const EXAMPLE_JOURNALS = [
+  "Advanced Robotics",
+  "Science Robotics",
+  "npj Robotics",
+];
 
 const currentYear = new Date().getFullYear();
 
@@ -48,6 +55,18 @@ export default function OverviewTab({
   const rangeValid = yearRange.to - yearRange.from + 1 >= MIN_YEAR_RANGE;
   const canRun = !!journal && rangeValid && !isRunning;
 
+  const [exampleLoading, setExampleLoading] = useState(null);
+
+  const handleExampleClick = async (name) => {
+    if (exampleLoading) return;
+    setExampleLoading(name);
+    try {
+      const results = await searchSources(name);
+      if (results.length > 0) setJournal(results[0]);
+    } catch { /* ignore */ }
+    setExampleLoading(null);
+  };
+
   const measureYears = driftResult?.measurements.map(m => m.year) ?? [];
   const hasRefAlignment = Object.keys(refAlignmentPerYear).length > 0;
 
@@ -93,6 +112,62 @@ export default function OverviewTab({
           <JournalSearch onSelect={setJournal} disabled={isRunning} />
         )}
       </Section>
+
+      {/* Empty state — instructions + example journals */}
+      {!journal && phase === "idle" && (
+        <div
+          style={{
+            marginTop: 40,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 16,
+            textAlign: "center",
+            animation: "fadeIn 0.3s ease",
+          }}
+        >
+          <div style={{ fontSize: 36, opacity: 0.18, lineHeight: 1 }}>◎</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.textPrimary, fontFamily: "'IBM Plex Sans', sans-serif" }}>
+            Analyse a journal's publishing profile over time
+          </div>
+          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: "'IBM Plex Sans', sans-serif", lineHeight: 1.7, maxWidth: 420 }}>
+            Search for a journal above, set a date range, and click Analyse.
+            The tool computes topic drift, authorship concentration, self-citation density,
+            and article count variation — all from{" "}
+            <a href="https://openalex.org" target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>
+              OpenAlex
+            </a>{" "}
+            open data.
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Try an example
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+              {EXAMPLE_JOURNALS.map(name => (
+                <button
+                  key={name}
+                  onClick={() => handleExampleClick(name)}
+                  disabled={!!exampleLoading}
+                  style={{
+                    background: "transparent",
+                    border: `1px solid ${C.border2}`,
+                    borderRadius: 20,
+                    color: exampleLoading === name ? C.textMuted : C.blue,
+                    fontSize: 12,
+                    fontFamily: "'IBM Plex Sans', sans-serif",
+                    padding: "6px 14px",
+                    cursor: exampleLoading ? "default" : "pointer",
+                    transition: "border-color 0.15s, color 0.15s",
+                  }}
+                >
+                  {exampleLoading === name ? "Loading…" : name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Year range */}
       {journal && (
