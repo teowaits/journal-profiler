@@ -31,54 +31,73 @@ export default function App() {
   const [refAlignPhase, setRefAlignPhase] = useState("idle");
   const [sessionSaved, setSessionSaved]   = useState(true); // false = quota exceeded
 
-  const { state, run, cancel, restore, runRefAlignment, runPeerComparison } = useAnalysis();
+  const { state, run, cancel, restore, runArticles, runRefAlignment, runPeerComparison } = useAnalysis();
 
   const {
-    phase, log, progress,
-    worksPerYear, topicProfilePerYear,
+    phase, articlesPhase, log, progress,
+    worksPerYear, worksLitePerYear, topicProfilePerYear,
     driftResult, authorProfilePerYear, institutionSurgesPerYear, intraCitationPerYear,
     articleCountVariation, totalSelfCitePerYear,
     divergentArticles, refAlignmentPerYear,
+    countsPerYear,
     peerDivergence, truncatedYears,
   } = state;
 
   // ── Restore from sessionStorage on mount ──────────────────────────────────
   useEffect(() => {
+    // Hard refresh (Cmd+Shift+R) should give a clean slate — detect and skip restore.
+    const navType = performance.getEntriesByType?.("navigation")[0]?.type;
+    if (navType === "reload") {
+      sessionStorage.clear();
+      return;
+    }
     const saved = loadSession();
     if (!saved) return;
     if (saved.journal)   setJournal(saved.journal);
     if (saved.yearRange) setYearRange(saved.yearRange);
-    if (saved.analysis)  restore(saved.analysis);
+    if (saved.analysis)  restore({
+      ...saved.analysis,
+      journal:   saved.journal,
+      yearRange: saved.yearRange,
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Persist after main analysis and after ref alignment ───────────────────
+  // ── Persist after main analysis, after Phase 2, and after ref alignment ──────
   useEffect(() => {
     if (state.phase !== "done" || !journal) return;
     const ok = saveSession({
       journal,
       yearRange,
       analysis: {
-        worksPerYear:             state.worksPerYear,
         topicProfilePerYear:      state.topicProfilePerYear,
         driftResult:              state.driftResult,
         authorProfilePerYear:     state.authorProfilePerYear,
         institutionSurgesPerYear: state.institutionSurgesPerYear,
         intraCitationPerYear:     state.intraCitationPerYear,
+        totalSelfCitePerYear:     state.totalSelfCitePerYear,
         articleCountVariation:    state.articleCountVariation,
+        countsPerYear:            state.countsPerYear,
+        worksLitePerYear:         state.worksLitePerYear,
+        worksPerYear:             state.worksPerYear,
         divergentArticles:        state.divergentArticles,
         truncatedYears:           state.truncatedYears,
         refAlignmentPerYear:      state.refAlignmentPerYear,
-        totalSelfCitePerYear:     state.totalSelfCitePerYear,
       },
     });
     setSessionSaved(ok);
-  }, [state.phase, state.refAlignmentPerYear, state.totalSelfCitePerYear]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.phase, state.articlesPhase, state.refAlignmentPerYear, state.totalSelfCitePerYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalArticles = Object.values(worksPerYear).reduce((n, arr) => n + arr.length, 0);
+  // Use countsPerYear (available after Phase 1) for header display;
+  // fall back to works array lengths if restored from an older session.
+  const totalArticles = Object.keys(countsPerYear).length > 0
+    ? Object.values(countsPerYear).reduce((n, c) => n + c, 0)
+    : Object.values(worksPerYear).reduce((n, arr) => n + arr.length, 0);
+
   const hasRefAlignment = Object.keys(refAlignmentPerYear).length > 0;
 
   const handleRun = () => run(journal, yearRange);
   const handleCancel = () => cancel();
+  const handleRunArticles = () => runArticles();
   const handleRunRefAlignment = () => {
     const measureYears = driftResult.measurements.map(m => m.year);
     setRefAlignPhase("running");
@@ -113,26 +132,26 @@ export default function App() {
         a { color: ${C.blue}; }
       `}</style>
 
-      {/* Session-not-saved warning */}
-      {phase === "done" && !sessionSaved && (
-        <div style={{
-          background: C.surface2,
-          borderBottom: `1px solid ${C.amber}`,
-          padding: "7px 32px",
-          fontSize: 11,
-          color: C.amber,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexShrink: 0,
-        }}>
-          <span>⚠</span>
-          <span>
-            Results not saved — dataset too large for browser storage.
-            If this tab is reloaded or the computer sleeps, the analysis will need to be re-run.
-          </span>
-        </div>
-      )}
+      {/* Proactive warning — always visible */}
+      <div style={{
+        background: C.surface2,
+        borderBottom: `1px solid ${C.border2}`,
+        padding: "7px 32px",
+        fontSize: 11,
+        color: C.textMuted,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexShrink: 0,
+      }}>
+        <span>⚠</span>
+        <span>
+          Warning for large journals: if this tab is reloaded or the computer sleeps, the analysis will need to be re-run.
+          {phase === "done" && !sessionSaved && (
+            <span style={{ color: C.amber }}> Results not saved — dataset too large for browser storage.</span>
+          )}
+        </span>
+      </div>
 
       {/* Header */}
       <header
@@ -207,7 +226,7 @@ export default function App() {
           const active = activeTab === tab.id;
           const enabled =
             tab.id === "overview" ||
-            (tab.id === "articles" && divergentArticles.length > 0) ||
+            (tab.id === "articles" && phase === "done") ||
             (tab.id === "topics"   && !!driftResult) ||
             (tab.id === "authors"  && !!driftResult) ||
             (tab.id === "peers"    && !!driftResult);
@@ -230,7 +249,7 @@ export default function App() {
               }}
             >
               {tab.label}
-              {tab.id === "articles" && divergentArticles.length > 0 && (
+              {tab.id === "articles" && articlesPhase === "done" && divergentArticles.length > 0 && (
                 <span
                   style={{
                     marginLeft: 6,
@@ -266,13 +285,14 @@ export default function App() {
             yearRange={yearRange}
             setYearRange={setYearRange}
             phase={phase}
+            articlesPhase={articlesPhase}
             progress={progress}
             log={log}
             onRun={handleRun}
             onCancel={handleCancel}
             driftResult={driftResult}
             authorProfilePerYear={authorProfilePerYear}
-            intraCitationPerYear={intraCitationPerYear}
+            totalSelfCitePerYear={totalSelfCitePerYear}
             articleCountVariation={articleCountVariation}
             refAlignmentPerYear={refAlignmentPerYear}
             truncatedYears={truncatedYears}
@@ -297,6 +317,8 @@ export default function App() {
             driftResult={driftResult}
             refAlignmentPerYear={refAlignmentPerYear}
             hasRefAlignment={hasRefAlignment}
+            articlesPhase={articlesPhase}
+            onRunArticles={handleRunArticles}
           />
         )}
 
@@ -304,11 +326,12 @@ export default function App() {
           <AuthorIntraTab
             journal={journal}
             driftResult={driftResult}
+            worksLitePerYear={worksLitePerYear}
             worksPerYear={worksPerYear}
             authorProfilePerYear={authorProfilePerYear}
             institutionSurgesPerYear={institutionSurgesPerYear}
-            intraCitationPerYear={intraCitationPerYear}
             totalSelfCitePerYear={totalSelfCitePerYear}
+            articlesPhase={articlesPhase}
           />
         )}
 

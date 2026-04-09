@@ -97,7 +97,7 @@ function WordCloudComparison({ baseline, baselineYears, measurements, topicProfi
 
   return (
     <div style={{ marginBottom: 28 }}>
-      {/* Header row: section label + export button */}
+      {/* Header row: section label + export buttons */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <div
           style={{
@@ -109,24 +109,44 @@ function WordCloudComparison({ baseline, baselineYears, measurements, topicProfi
         >
           Topic &amp; subfield word clouds
         </div>
-        <button
-          onClick={() => exportCSV(topicProfilePerYear, allYears, journalName)}
-          style={{
-            background: "none",
-            border: `1px solid ${C.border2}`,
-            borderRadius: 6,
-            color: C.textMuted,
-            fontSize: 11,
-            fontFamily: "'IBM Plex Mono', monospace",
-            padding: "4px 10px",
-            cursor: "pointer",
-            letterSpacing: "0.05em",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = C.textPrimary; e.currentTarget.style.borderColor = C.blue; }}
-          onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.borderColor = C.border2; }}
-        >
-          Export CSV
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => exportCSV(topicProfilePerYear, allYears, journalName)}
+            style={{
+              background: "none",
+              border: `1px solid ${C.border2}`,
+              borderRadius: 6,
+              color: C.textMuted,
+              fontSize: 11,
+              fontFamily: "'IBM Plex Mono', monospace",
+              padding: "4px 10px",
+              cursor: "pointer",
+              letterSpacing: "0.05em",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = C.textPrimary; e.currentTarget.style.borderColor = C.blue; }}
+            onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.borderColor = C.border2; }}
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={() => exportGemFinder(topicProfilePerYear, selectedYear, journalName)}
+            style={{
+              background: "none",
+              border: `1px solid ${C.border2}`,
+              borderRadius: 6,
+              color: C.textMuted,
+              fontSize: 11,
+              fontFamily: "'IBM Plex Mono', monospace",
+              padding: "4px 10px",
+              cursor: "pointer",
+              letterSpacing: "0.05em",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = C.textPrimary; e.currentTarget.style.borderColor = C.blue; }}
+            onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.borderColor = C.border2; }}
+          >
+            Export for Gem Finder
+          </button>
+        </div>
       </div>
 
       {/* Two-column layout */}
@@ -328,6 +348,42 @@ function exportCSV(topicProfilePerYear, allYears, journalName) {
   }
 
   downloadCSV(lines.join("\n"), `${journalSlug(journalName)}_topic_distribution.csv`);
+}
+
+// ─── Gem Finder export (selected year only, topics + subfields ranked by count) ─
+
+function exportGemFinder(topicProfilePerYear, selectedYear, journalName) {
+  const profile = topicProfilePerYear[selectedYear] ?? {};
+  const note = `from journal-profiler · Topic Profile tab · ${journalName ?? ""} · ${selectedYear}`;
+
+  const subfieldMap = {};
+  const topicRows = [];
+
+  for (const entry of Object.values(profile)) {
+    topicRows.push({ gemType: "topic", id: entry.id, name: entry.name, count: entry.count });
+
+    const sfid = entry.subfield?.id;
+    if (sfid) {
+      if (!subfieldMap[sfid]) {
+        subfieldMap[sfid] = { gemType: "subfield", id: sfid, name: entry.subfield.display_name, count: 0 };
+      }
+      subfieldMap[sfid].count += entry.count;
+    }
+  }
+
+  const allRows = [
+    ...topicRows,
+    ...Object.values(subfieldMap),
+  ].sort((a, b) => b.count - a.count);
+
+  const q = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+  const lines = [
+    ["type", "OpenAlex ID", "display_name", "notes"].map(q).join(","),
+    ...allRows.map(r => [r.gemType, r.id, r.name, note].map(q).join(",")),
+  ];
+
+  const today = new Date().toISOString().split("T")[0];
+  downloadCSV(lines.join("\n"), `journal-profiler-gem-finder-topics-${today}.csv`);
 }
 
 // ─── Field distribution CSV export ───────────────────────────────────────────

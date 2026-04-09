@@ -13,18 +13,18 @@ import BarChart from "./BarChart.jsx";
  *   worksPerYear: object,
  *   authorProfilePerYear: object,
  *   institutionSurgesPerYear: object,
- *   intraCitationPerYear: object,
  *   totalSelfCitePerYear: object,
  * }} props
  */
 export default function AuthorIntraTab({
   journal,
   driftResult,
+  worksLitePerYear,
   worksPerYear,
   authorProfilePerYear,
   institutionSurgesPerYear,
-  intraCitationPerYear,
   totalSelfCitePerYear,
+  articlesPhase,
 }) {
   if (!driftResult) {
     return (
@@ -88,7 +88,7 @@ export default function AuthorIntraTab({
               Institutions whose share of author affiliations increased by
               ≥ {(INSTITUTION_SURGE_THRESHOLDS.DELTA * 100).toFixed(0)} percentage points vs the
               baseline aggregate, and represent ≥ {(INSTITUTION_SURGE_THRESHOLDS.MIN_SHARE * 100).toFixed(0)}%
-              of the year's author affiliations. Expand a row to view the associated articles.
+              of the year's author affiliations.{articlesPhase === "done" ? " Expand a row to view the associated articles." : " Load article detail (Articles tab) to view the associated articles per row."}
             </div>
 
             <YearPicker years={measureYears} selected={selectedYear} onSelect={setSelectedYear} />
@@ -98,7 +98,9 @@ export default function AuthorIntraTab({
                 <SurgeTable
                   year={selectedYear}
                   surges={institutionSurgesPerYear[selectedYear] ?? []}
-                  works={worksPerYear[selectedYear] ?? []}
+                  liteWorks={worksLitePerYear[selectedYear] ?? []}
+                  detailWorks={worksPerYear[selectedYear] ?? []}
+                  articlesPhase={articlesPhase}
                 />
               </div>
             )}
@@ -150,39 +152,14 @@ export default function AuthorIntraTab({
 
       {/* ── Section 4: Self-citation density ──────────────────────────────── */}
       <Section title="Self-citation density">
-
-        <SubSection title="Within analysis window">
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
-            Share of references pointing to other articles in the same journal
-            within the selected date range. References to same-journal articles
-            outside the window are not counted here.
-          </div>
-          <IntraCiteChart years={measureYears} intraCitationPerYear={intraCitationPerYear} />
-          <div style={{ marginTop: 16 }}>
-            <IntraCiteTable years={measureYears} intraCitationPerYear={intraCitationPerYear} />
-          </div>
-        </SubSection>
-
-        <SubSection title="Total self-citation rate (all reference years)">
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
-            Share of references from measurement-year articles pointing to the same journal,
-            regardless of the referenced article's publication year.
-            Computed together with reference field alignment.
-          </div>
-
-          {Object.keys(totalSelfCitePerYear).length === 0 ? (
-            <div style={{ fontSize: 12, color: C.textMuted, fontStyle: "italic" }}>
-              Run reference field alignment from the Overview tab to compute this.
-            </div>
-          ) : (
-            <>
-              <IntraCiteChart years={measureYears} intraCitationPerYear={totalSelfCitePerYear} />
-              <div style={{ marginTop: 16 }}>
-                <IntraCiteTable years={measureYears} intraCitationPerYear={totalSelfCitePerYear} />
-              </div>
-            </>
-          )}
-        </SubSection>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
+          Share of references from measurement-year articles pointing to the same journal,
+          regardless of the referenced article's publication year.
+        </div>
+        <IntraCiteChart years={measureYears} intraCitationPerYear={totalSelfCitePerYear} />
+        <div style={{ marginTop: 16 }}>
+          <IntraCiteTable years={measureYears} intraCitationPerYear={totalSelfCitePerYear} />
+        </div>
       </Section>
 
     </div>
@@ -228,7 +205,7 @@ function HHIChart({ years, authorProfilePerYear }) {
 
 // ─── Institution surge table ──────────────────────────────────────────────────
 
-function SurgeTable({ year, surges, works }) {
+function SurgeTable({ year, surges, liteWorks, detailWorks, articlesPhase }) {
   const [expanded, setExpanded] = useState(null);
 
   if (surges.length === 0) {
@@ -255,7 +232,14 @@ function SurgeTable({ year, surges, works }) {
 
       {surges.map(s => {
         const isExpanded = expanded === s.name;
-        const articles   = works.filter(w =>
+        // Use lite works (always available after Phase 1) for the count
+        const liteArticles = liteWorks.filter(w =>
+          w.authorships?.some(a =>
+            a.institutions?.some(inst => inst.display_name === s.name)
+          )
+        );
+        // Use detail works (Phase 2) for the expanded list with titles/DOIs
+        const detailArticles = detailWorks.filter(w =>
           w.authorships?.some(a =>
             a.institutions?.some(inst => inst.display_name === s.name)
           )
@@ -292,18 +276,22 @@ function SurgeTable({ year, surges, works }) {
                 +{(s.delta * 100).toFixed(1)} pp
               </div>
               <div style={{ ...cell, fontFamily: "'IBM Plex Mono', monospace", color: C.textMuted }}>
-                {articles.length}
+                {liteArticles.length}
               </div>
             </div>
 
             {/* Expanded article list */}
             {isExpanded && (
               <div style={{ background: C.bgDark, borderTop: `1px solid ${C.border}`, padding: "12px 16px" }}>
-                {articles.length === 0 ? (
+                {articlesPhase !== "done" ? (
+                  <div style={{ fontSize: 12, color: C.textMuted }}>
+                    {liteArticles.length} article{liteArticles.length !== 1 ? "s" : ""} — load article detail (Articles tab) to view titles and links.
+                  </div>
+                ) : detailArticles.length === 0 ? (
                   <div style={{ fontSize: 12, color: C.textMuted }}>No articles found.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {articles.map(w => {
+                    {detailArticles.map(w => {
                       const authors = (w.authorships ?? [])
                         .filter(a => a.institutions?.some(inst => inst.display_name === s.name))
                         .map(a => a.author?.display_name)

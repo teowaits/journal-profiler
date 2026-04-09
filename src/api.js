@@ -143,6 +143,146 @@ export async function fetchArticlesForJournal(sourceId, fromYear, toYear, { onPr
   return { worksPerYear, allWorkIds, truncatedYears };
 }
 
+// ─── Phase 1: group_by aggregation calls ──────────────────────────────────────
+
+/**
+ * Fetch a single group_by aggregation for a journal-year.
+ * Returns an array of { key, key_display_name, count } buckets.
+ * Paginates if the group set exceeds 200 entries.
+ *
+ * @param {string} sourceId
+ * @param {string|number} year
+ * @param {string} groupByField — e.g. "primary_topic.id", "authorships.countries"
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<Array<{ key: string, key_display_name: string, count: number }>>}
+ */
+export async function fetchGroupByYear(sourceId, year, groupByField, signal) {
+  const sid = stripBase(sourceId);
+  const filter =
+    `primary_location.source.id:${sid}` +
+    `,publication_year:${year}` +
+    `,type:article`;
+
+  if (signal?.aborted) throw new Error("Cancelled");
+  const data = await apiFetch(
+    `${OPENALEX_BASE}/works?filter=${filter}&group_by=${groupByField}`,
+    signal
+  );
+  return data.group_by ?? [];
+}
+
+/**
+ * Fetch topic hierarchy (subfield, field, domain) for a set of topic IDs.
+ * Used to enrich group_by results that only return key + display_name.
+ *
+ * @param {Iterable<string>} topicIds — full OpenAlex topic URIs
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<Map<string, { id, display_name, subfield, field, domain }>>}
+ */
+export async function fetchTopicMetadata(topicIds, signal) {
+  const meta = new Map();
+  const chunks = chunkArray([...topicIds], BATCH_SIZE);
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (signal?.aborted) throw new Error("Cancelled");
+
+    const ids = chunks[i].map(id => stripBase(id)).join("|");
+    const data = await apiFetch(
+      `${OPENALEX_BASE}/topics?filter=ids.openalex:${ids}` +
+      `&select=id,display_name,subfield,field,domain&per_page=${BATCH_SIZE}`,
+      signal
+    );
+
+    for (const t of (data.results ?? [])) {
+      if (t.id) meta.set(t.id, t);
+    }
+
+    if (i < chunks.length - 1) await sleep(PAGE_DELAY_MS);
+  }
+
+  return meta;
+}
+
+/**
+ * Lightweight article fetch: retrieves only id + referenced_works for every article
+ * in the year range. Used in Phase 1 for within-window and total self-citation.
+ *
+ * @param {string} sourceId
+ * @param {number} fromYear
+ * @param {number} toYear
+ * @param {{ onProgress: function, onLog: function }} callbacks
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{
+ *   worksLitePerYear: { [year: string]: Array<{ id: string, referenced_works: string[], authorships: object[] }> },
+ *   allWorkIds: Set<string>,
+ *   countsPerYear: { [year: string]: number },
+ *   truncatedYears: string[],
+ * }>}
+ */
+export async function fetchArticleIdsAndRefs(sourceId, fromYear, toYear, { onProgress, onLog }, signal) {
+  const sid = stripBase(sourceId);
+  const refsPerYear = {};
+  const allWorkIds = new Set();
+  const countsPerYear = {};
+  const truncatedYears = [];
+
+  for (let year = fromYear; year <= toYear; year++) {
+    if (signal?.aborted) throw new Error("Cancelled");
+
+    const filter =
+      `primary_location.source.id:${sid}` +
+      `,publication_year:${year}` +
+      `,type:article`;
+
+    const meta = await apiFetch(
+      `${OPENALEX_BASE}/works?filter=${filter}&per_page=1&select=id`,
+      signal
+    );
+    const total = meta.meta?.count ?? 0;
+    countsPerYear[String(year)] = total;
+    onLog?.(`${year}: ${total} articles found`);
+
+    if (total === 0) {
+      refsPerYear[String(year)] = [];
+      continue;
+    }
+
+    const pages = Math.min(Math.ceil(total / PER_PAGE), MAX_PAGES);
+    const truncated = total > MAX_PAGES * PER_PAGE;
+    if (truncated) truncatedYears.push(String(year));
+
+    const yearEntries = [];
+
+    for (let page = 1; page <= pages; page++) {
+      if (signal?.aborted) throw new Error("Cancelled");
+
+      const data = await apiFetch(
+        `${OPENALEX_BASE}/works?filter=${filter}` +
+        `&per_page=${PER_PAGE}&page=${page}` +
+        `&select=id,referenced_works,authorships`,
+        signal
+      );
+
+      const works = data.results ?? [];
+      if (works.length === 0) break;
+
+      for (const w of works) {
+        if (w.id) allWorkIds.add(w.id);
+        yearEntries.push(w);
+      }
+
+      onProgress?.({ year, page, pages, total });
+      onLog?.(`${year}: page ${page}/${pages}`);
+
+      if (page < pages) await sleep(PAGE_DELAY_MS);
+    }
+
+    refsPerYear[String(year)] = yearEntries;
+  }
+
+  return { worksLitePerYear: refsPerYear, allWorkIds, countsPerYear, truncatedYears };
+}
+
 // ─── Batch reference fetch (Signal 2 — optional) ──────────────────────────────
 
 /**

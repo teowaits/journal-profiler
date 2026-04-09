@@ -110,6 +110,7 @@ Every analytical view offers CSV export:
 | Export | Contents |
 |--------|----------|
 | Topic distribution | One row per topic and subfield; article counts per year |
+| Topic distribution — Gem Finder | Topics and subfields for the selected year, ranked by article count; compatible with the journal-overlap Gem Finder workflow |
 | Field distribution | One row per field; article counts per year |
 | Articles | All measurement-year articles with topic alignment metrics and optional ref-alignment columns |
 | Country distribution | All countries (not just the chart's top 10); author-affiliation counts per year |
@@ -118,6 +119,27 @@ Every analytical view offers CSV export:
 | Peer comparison | Topic % for this journal and the peer centroid, with JSD scores |
 
 All files are named `{Journal_Name}_{type}.csv` and include the journal name as the first row for easy identification.
+
+---
+
+## Changelog
+
+### Post-release updates (since initial GitHub publish)
+
+#### Analysis architecture — two-phase model
+The main analysis run no longer fetches full article records upfront. Phase 1 now uses the OpenAlex `group_by` endpoint to retrieve topic distributions, country concentrations, and article counts in one call per year — significantly faster for large journals. A lightweight pass then fetches only article IDs, referenced works, and authorships (no titles, no full metadata) to compute self-citation signals. This makes the initial run faster and cheaper for all journal sizes.
+
+#### Self-citation computation — breaking change
+Intra-citation density and total self-citation rate are now computed from the lightweight ID/refs fetch in Phase 1, rather than from the full article payload. The underlying figures are equivalent, but the pipeline is separate from article detail loading. The `intraCitationPerYear` state is now derived from `worksLitePerYear` (lightweight works) rather than `worksPerYear` (full article detail).
+
+#### Article detail is now optional
+The full article fetch — required to populate the Articles tab with per-article topic alignment scores — is now a separate, on-demand step. After Phase 1 completes, the Overview, Topic Profile, and Authors & Citations tabs are fully populated. The Articles tab displays a prompt with a **Load article detail** button; users who only need aggregate signals can skip this step entirely. This is particularly useful for large journals where the full fetch can take several minutes.
+
+#### New export — Gem Finder format
+The Topic Profile tab now offers an **Export for Gem Finder** button alongside the existing Export CSV in the word cloud section. It exports topics and subfields for the selected year, ranked by article count, in the four-column format (`type`, `OpenAlex ID`, `display_name`, `notes`) compatible with [journal-overlap](https://github.com/teowaits/journal-overlap)'s Gem Finder workflow.
+
+#### Reload warning shown proactively
+The warning about re-running the analysis on tab reload or computer sleep is now displayed permanently at the top of the page — before any journal is selected — so users can take steps (e.g. disable sleep) before starting a long run on a large journal.
 
 ---
 

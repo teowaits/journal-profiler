@@ -13,9 +13,11 @@ const SORT_OPTIONS = [
  *   driftResult: object | null,
  *   refAlignmentPerYear: object,
  *   hasRefAlignment: boolean,
+ *   articlesPhase: string,
+ *   onRunArticles: function,
  * }} props
  */
-export default function ArticlesTab({ journal, divergentArticles, driftResult, hasRefAlignment }) {
+export default function ArticlesTab({ journal, divergentArticles, driftResult, hasRefAlignment, articlesPhase, onRunArticles }) {
   const [sortKey, setSortKey]       = useState("score");
   const [sortDir, setSortDir]       = useState("desc");
   const [yearFilter, setYearFilter] = useState("all");
@@ -47,6 +49,46 @@ export default function ArticlesTab({ journal, divergentArticles, driftResult, h
   };
 
   if (!divergentArticles.length) {
+    if (articlesPhase === "running") {
+      return (
+        <div style={{ color: C.textMuted, fontSize: 13, padding: "40px 0", textAlign: "center" }}>
+          Loading article detail…
+        </div>
+      );
+    }
+
+    if (articlesPhase === "idle") {
+      return (
+        <div style={{ textAlign: "center", padding: "60px 0" }}>
+          <div style={{ fontSize: 20, color: C.textMuted, marginBottom: 12 }}>◎</div>
+          <div style={{ fontSize: 13, color: C.textPrimary, marginBottom: 6 }}>
+            Article detail not loaded
+          </div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
+            Topic drift, country concentration, and self-citation signals are available in the other tabs.
+            Load article detail to see per-article topic alignment and identify which articles
+            contribute most to any observed scope shifts.
+          </div>
+          <button
+            onClick={onRunArticles}
+            style={{
+              background: C.blue,
+              color: C.bg,
+              border: "none",
+              borderRadius: 6,
+              padding: "9px 20px",
+              fontSize: 12,
+              fontFamily: "'IBM Plex Mono', monospace",
+              cursor: "pointer",
+              letterSpacing: "0.02em",
+            }}
+          >
+            Load article detail
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div style={{ color: C.textMuted, fontSize: 13, padding: "40px 0", textAlign: "center" }}>
         Run the analysis to view articles.

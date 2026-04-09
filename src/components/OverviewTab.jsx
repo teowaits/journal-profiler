@@ -25,7 +25,7 @@ const currentYear = new Date().getFullYear();
  *   onCancel: function,
  *   driftResult: object | null,
  *   authorProfilePerYear: object,
- *   intraCitationPerYear: object,
+ *   totalSelfCitePerYear: object,
  *   refAlignmentPerYear: object,
  *   truncatedYears: string[],
  *   totalArticles: number,
@@ -35,11 +35,11 @@ const currentYear = new Date().getFullYear();
 export default function OverviewTab({
   journal, setJournal,
   yearRange, setYearRange,
-  phase, progress, log,
+  phase, articlesPhase, progress, log,
   onRun, onCancel,
   driftResult,
   authorProfilePerYear,
-  intraCitationPerYear,
+  totalSelfCitePerYear,
   articleCountVariation,
   refAlignmentPerYear,
   truncatedYears,
@@ -226,6 +226,11 @@ export default function OverviewTab({
       {isError && (
         <div style={{ fontSize: 13, color: C.red, marginBottom: 16 }}>
           An error occurred. Check your connection and try again.
+          {log.length > 0 && (
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+              {log[log.length - 1]}
+            </div>
+          )}
         </div>
       )}
 
@@ -315,12 +320,12 @@ export default function OverviewTab({
               }}
             />
 
-            {/* Intra-citation row */}
+            {/* Self-citation row — total rate (all reference years, computed in Phase 1) */}
             <CompositeRow
               label="Self-citation"
               years={measureYears}
               getValue={y => {
-                const d = intraCitationPerYear[y];
+                const d = totalSelfCitePerYear[y];
                 return d ? { label: d.label, raw: d.density } : null;
               }}
             />
@@ -333,8 +338,8 @@ export default function OverviewTab({
             />
           </div>
 
-          {/* Optional: run reference alignment */}
-          {!hasRefAlignment && (
+          {/* Optional: run reference alignment (requires article detail to be loaded) */}
+          {!hasRefAlignment && articlesPhase === "done" && (
             <div
               style={{
                 background: C.surface2,

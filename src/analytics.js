@@ -120,24 +120,24 @@ export function computeJSDivergence(distA, distB) {
  * Compute year-over-year drift relative to a 5-year baseline aggregate.
  * The baseline is the first BASELINE_YEARS years of the provided data.
  *
- * @param {{ [year: string]: object[] }} worksPerYear — plain object, keys are year strings
+ * @param {{ [year: string]: object }} topicProfilePerYear — pre-computed topic profiles,
+ *   each from computeTopicDistribution or buildTopicProfileFromGroups
  * @returns {{
  *   baselineYears: string[],
  *   baseline: object,
  *   measurements: Array<{ year, jsd, topicProfile, label }>
  * }}
  */
-export function computeDriftOverTime(worksPerYear) {
-  const years = Object.keys(worksPerYear).sort();
+export function computeDriftOverTime(topicProfilePerYear) {
+  const years = Object.keys(topicProfilePerYear).sort();
 
   const baselineYears = years.slice(0, BASELINE_YEARS);
   const measureYears  = years.slice(BASELINE_YEARS);
 
-  const baselineDists = baselineYears.map(y => computeTopicDistribution(worksPerYear[y]));
-  const baseline = aggregateDistributions(baselineDists);
+  const baseline = aggregateDistributions(baselineYears.map(y => topicProfilePerYear[y]));
 
   const measurements = measureYears.map(year => {
-    const topicProfile = computeTopicDistribution(worksPerYear[year]);
+    const topicProfile = topicProfilePerYear[year];
     const jsd = computeJSDivergence(baseline, topicProfile);
     return { year, jsd, topicProfile, label: driftLabel(jsd) };
   });
@@ -264,6 +264,174 @@ export function computeInstitutionSurges(yearWorks, baselineDist) {
   }
 
   return surges.sort((a, b) => b.delta - a.delta);
+}
+
+// ─── group_by adapters (Phase 1 — no full article fetch) ─────────────────────
+
+/**
+ * Build a topic profile from OpenAlex group_by results + fetched topic metadata.
+ * Produces the same shape as computeTopicDistribution.
+ *
+ * @param {Array<{ key: string, key_display_name: string, count: number }>} groups
+ *   — from group_by=primary_topic.id
+ * @param {Map<string, { id, display_name, subfield, field, domain }>} topicMeta
+ *   — from fetchTopicMetadata; keyed by full OpenAlex topic URI
+ * @returns {Object.<string, { id, name, subfield, field, domain, count, pct }>}
+ */
+export function buildTopicProfileFromGroups(groups, topicMeta) {
+  const counts = {};
+  let total = 0;
+
+  for (const { key, key_display_name, count } of groups) {
+    if (!key) continue;
+    const meta = topicMeta.get(key) ?? {};
+    counts[key] = {
+      id: key,
+      name: key_display_name ?? meta.display_name ?? key,
+      subfield: meta.subfield ?? null,
+      field: meta.field ?? null,
+      domain: meta.domain ?? null,
+      count,
+      pct: 0,
+    };
+    total += count;
+  }
+
+  if (total > 0) {
+    for (const entry of Object.values(counts)) {
+      entry.pct = entry.count / total;
+    }
+  }
+
+  return counts;
+}
+
+/**
+ * Compute country HHI from OpenAlex group_by=authorships.countries results.
+ * Produces the same shape as computeCountryHHI.
+ *
+ * Note: group_by=authorships.countries counts at the authorship level (one entry
+ * per author-country pair), which closely matches the institution-level iteration
+ * of computeCountryHHI for HHI purposes.
+ *
+ * @param {Array<{ key: string, key_display_name: string, count: number }>} groups
+ * @returns {{ hhi: number, label: string, countries: Array<{ code, name, count, share }> }}
+ */
+export function computeCountryHHIFromCounts(groups) {
+  const total = groups.reduce((n, g) => n + g.count, 0);
+  if (total === 0) return { hhi: 0, label: CONCENTRATION_LABELS.typical, countries: [] };
+
+  let regionNames;
+  try { regionNames = new Intl.DisplayNames(["en"], { type: "region" }); } catch { /* noop */ }
+
+  let hhi = 0;
+  const countries = [];
+  for (const { key, key_display_name, count } of groups) {
+    if (!key) continue;
+    const share = count / total;
+    hhi += share * share;
+    let name = key_display_name ?? key;
+    try { name = regionNames?.of(key) ?? name; } catch { /* noop */ }
+    countries.push({ code: key, name, count, share });
+  }
+  countries.sort((a, b) => b.count - a.count);
+
+  const label = hhi >= HHI_THRESHOLDS.MODERATE
+    ? CONCENTRATION_LABELS.outside
+    : CONCENTRATION_LABELS.typical;
+
+  return { hhi, label, countries };
+}
+
+/**
+ * Build a per-institution share map from OpenAlex group_by=authorships.institutions.id results.
+ * Produces the same shape as buildInstitutionDist.
+ *
+ * @param {Array<{ key: string, key_display_name: string, count: number }>} groups
+ * @returns {Object.<string, { name, count, share }>}
+ */
+export function buildInstitutionDistFromCounts(groups) {
+  // Keyed by display_name (matching buildInstitutionDist behaviour)
+  const dist = {};
+  for (const { key_display_name, key, count } of groups) {
+    const name = key_display_name || key;
+    if (!name) continue;
+    // Accumulate in case two IDs share a display_name
+    if (dist[name]) {
+      dist[name].count += count;
+    } else {
+      dist[name] = { name, count, share: 0 };
+    }
+  }
+  const total = Object.values(dist).reduce((n, e) => n + e.count, 0);
+  if (total > 0) {
+    for (const entry of Object.values(dist)) {
+      entry.share = entry.count / total;
+    }
+  }
+  return dist;
+}
+
+/**
+ * Flag institution surges from pre-computed distribution objects.
+ * Variant of computeInstitutionSurges that takes dist maps directly
+ * instead of raw work arrays (used in Phase 1).
+ *
+ * @param {Object.<string, { name, count, share }>} yearDist — from buildInstitutionDistFromCounts
+ * @param {Object.<string, { share }>} baselineDist
+ * @returns {Array<{ name, yearShare, yearCount, baselineShare, delta, isNew }>}
+ */
+export function computeInstitutionSurgesFromDist(yearDist, baselineDist) {
+  const surges = [];
+  for (const [name, yearEntry] of Object.entries(yearDist)) {
+    if (yearEntry.share < INSTITUTION_SURGE_THRESHOLDS.MIN_SHARE) continue;
+    const baselineShare = baselineDist[name]?.share ?? 0;
+    const delta = yearEntry.share - baselineShare;
+    if (delta >= INSTITUTION_SURGE_THRESHOLDS.DELTA) {
+      surges.push({
+        name,
+        yearShare: yearEntry.share,
+        yearCount: yearEntry.count,
+        baselineShare,
+        delta,
+        isNew: !baselineDist[name],
+      });
+    }
+  }
+  return surges.sort((a, b) => b.delta - a.delta);
+}
+
+/**
+ * Compute year-over-year article count variation from pre-fetched counts.
+ * Variant of computeArticleCountVariation that takes { [year]: count } directly
+ * instead of raw works arrays (used in Phase 1).
+ *
+ * @param {{ [year: string]: number }} countsPerYear
+ * @param {string[]} baselineYears — sorted
+ * @param {string[]} measureYears — sorted
+ * @returns {{
+ *   perYear: { [year: string]: { count, yoyRate, label } },
+ *   allCounts: { [year: string]: number }
+ * }}
+ */
+export function computeArticleCountVariationFromCounts(countsPerYear, baselineYears, measureYears) {
+  const allYears = [...baselineYears, ...measureYears].sort();
+  const perYear = {};
+  for (const y of measureYears) {
+    const idx = allYears.indexOf(y);
+    const prevYear = idx > 0 ? allYears[idx - 1] : null;
+    const count = countsPerYear[y] ?? 0;
+    if (!prevYear || !countsPerYear[prevYear]) {
+      perYear[y] = { count, yoyRate: null, label: CONCENTRATION_LABELS.typical };
+      continue;
+    }
+    const yoyRate = (count - countsPerYear[prevYear]) / countsPerYear[prevYear];
+    const label = Math.abs(yoyRate) > ARTICLE_COUNT_VAR_THRESHOLD
+      ? CONCENTRATION_LABELS.outside
+      : CONCENTRATION_LABELS.typical;
+    perYear[y] = { count, yoyRate, label };
+  }
+  return { perYear, allCounts: countsPerYear };
 }
 
 // ─── Intra-citation density ───────────────────────────────────────────────────
